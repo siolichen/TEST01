@@ -465,7 +465,7 @@ void main(){
       vec2 puv = vec2((p.x - uPerP.x)/(uPerH*uPerA) + .5, 1. - (p.y - uPerP.y)/uPerH);
       puv.x += uStep.x*0.030*(0.55 - puv.y)*(1. - uPerIn);                          // 走路時肩膀左右擺
       if(puv.x > -0.3 && puv.x < 1.3 && puv.y > -0.15 && puv.y < 1.15){
-        float pb = 0.4 + 3.3*uPerIn;
+        float pb = 0.4 + 2.2*uPerIn;
         vec2 bo = vec2(0.014, 0.006)*uPerIn;
         vec4 pc = texture2D(uMan, puv, pb)*0.28 + (texture2D(uMan, puv + bo, pb) + texture2D(uMan, puv - bo, pb)
                 + texture2D(uMan, puv + bo*vec2(1.,-1.), pb) + texture2D(uMan, puv - bo*vec2(1.,-1.), pb))*0.18;
@@ -477,16 +477,11 @@ void main(){
         float pa = pc.a*uPerV*smoothstep(0.0, 0.04, puv.y)*smoothstep(-0.02, 0.06, puv.x)*smoothstep(1.02, 0.94, puv.x);
         if(uPerIn > 0.){
           pa *= mix(1., smoothstep(0.004, -0.004, d), smoothstep(0., 0.4, uPerIn));   // 進去之後只在鏡面裡看得到
-          // 穿過鏡面：從背心往外，身體一圈一圈「沒入」鏡子，沒入的部分變成霧白色
-          float wd = length((puv - vec2(0.5, 0.30))*vec2(1., 1.5));
-          float front = uPerIn*1.15 - 0.14;
-          float wf = smoothstep(0.13, -0.13, wd - front);
-          vec3 pale = vec3(0.78,0.775,0.76) + (pl - 0.22)*0.42;                   // 霧白，但還看得出衣服的皺褶
-          body = mix(body, pale, wf);
-          float rim = exp(-pow((wd - front)/0.045, 2.))*uPerIn*(1. - uPerIn)*4.;
-          body += vec3(1.0,0.98,0.94)*rim*0.55;                                  // 沒入邊界上一道柔光
-          pa *= mix(1., 0.86, wf);
-          pa *= mix(1., smoothstep(0.10, 0.50, 1. - puv.y), uPerIn);             // 腳先沒入霧裡
+          // 穿過之後人在鏡面後方：整個背影均勻蓋上一層鏡面的白霧（不是身體自己變白）
+          float veil = 0.;                                                        // 背影不變白，只是慢慢消失
+          float vg = fbm(p*30.)*0.06;
+          body = mix(body, col + vec3(0.13,0.128,0.122) + vg, veil);            // 那層白就是鏡面本身的霧色，再亮一點
+             // 腳先沒入霧裡
         }
         col = mix(col, body, pa);
         if(uPerX > 0.001 && d < 0.){                                             // 穿過鏡面的瞬間：身體與鏡面交界泛出光
@@ -783,20 +778,20 @@ function frame(now) {
       const bob = Math.pow(Math.abs(Math.sin(Math.PI * ph)), 0.8), sway = Math.sin(Math.PI * ph);
       // 只拍上半身（背和頭），手不入鏡
       const a1 = sm(0.0, 6.0, e), far = sm(6.0, 9.4, e);
-      const inn = sm(5.7, 7.0, e);                                   // 穿過鏡面：約 1.3 秒
-      const push = Math.sin(Math.PI * clamp((e - 5.7) / 1.3)) * 0.035;   // 穿過時身體微微往裡一沉
+      const inn = sm(4.0, 6.6, e);                                   // 第 4 秒走到鏡框邊界，白膜開始蓋上背影
+      const push = Math.sin(Math.PI * clamp((e - 4.0) / 1.6)) * 0.03;   // 穿過時身體微微往裡一沉
       const h = mix(mix(1.60, 1.50, a1), 1.30, far) * (1 - push);
       const top = mix(mix(0.21, 0.25, a1), 0.24, far);
       const amp = 1 - 0.6 * inn;
       st.per = { p: [sway * 0.010 * h * amp, top - h + bob * 0.024 * h * amp], h: h,
-                 v: sm(0.0, 1.0, e) * (1 - sm(8.0, 9.4, e)), in: inn, x: 0 };
+                 v: sm(0.0, 1.0, e) * (1 - sm(4.2, 9.0, e)), in: inn, x: 0 };   // 走進鏡子後，慢慢地消失
       step = [sway, bob * 0.5 * (1 - inn)];
-      if (e > 5.7 && !st.rippled) { st.rippled = true; st.ripT = time; st.ripC = [0, top - 0.30 * h]; }
-      pass = 0.5 * sm(5.7, 6.2, e) * (1 - sm(6.4, 7.4, e));          // 鏡面被穿過時的折射晃動與微亮
+      if (e > 4.0 && !st.rippled) { st.rippled = true; st.ripT = time; st.ripC = [0, top - 0.30 * h]; }
+      pass = 0.4 * sm(4.0, 4.5, e) * (1 - sm(4.7, 5.7, e));          // 鏡面被穿過時的折射晃動與微亮
       fog *= 1 + 0.7 * far;
-      flash = 0.94 * sm(7.3, 9.4, e);                               // 之後背景也漸漸變白，白色的背影溶進去
-      canvas.style.opacity = (1 - sm(9.8, 11.4, e)).toFixed(3);    // 最後整片淡出
-      if (e > 11.5) return finish();
+      flash = 0;                                                    // 不變白，只留鏡面的白幕
+      canvas.style.opacity = (1 - sm(8.8, 10.8, e)).toFixed(3);    // 人消失後，畫面緩緩淡出
+      if (e > 10.9) return finish();
     }
   }
 
